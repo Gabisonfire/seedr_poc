@@ -245,6 +245,7 @@ sched.add_job(get_missing, 'interval', seconds=cfg.read_config("missing_status_s
 sched.add_job(update_state, 'interval', seconds=cfg.read_config("state_change_scan_interval"), max_instances=10, id="state_change_scan")
 sched.add_job(match_and_move_torrents, 'interval', seconds=cfg.read_config("match_and_move_torrents_scan_interval"), max_instances=10, id="match_and_move_torrents_scan")
 sched.add_job(check_and_delete, 'interval', seconds=cfg.read_config("check_and_delete_scan_interval"), max_instances=1, id="check_and_delete_scan")
+sched.add_job(save, 'interval', seconds=300, max_instances=1, id="save")
 sched.start()
 logger.info("Waiting.")
 while True:
