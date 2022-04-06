@@ -1,5 +1,5 @@
 # Seedr
-Seedr is a companion for Radarr and Qbittorrent.
+Seedr is a companion for Radarr and qbittorrent.
 
 It will monitor your Radarr downloads. Once downloaded and copied to your library, it will point your torrent client to the file in your library and delete the file from your download directory.
 
