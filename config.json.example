@@ -10,7 +10,7 @@
     "torrent_dowload_directory": "/mnt/downloads",
     "torrent_library_directory": "/mnt/movies",
     "radarr_library_directory": "/data/movies",
-    "missing_status_scan_interval": 300,
+    "missing_status_scan_interval": 30,
     "state_change_scan_interval": 30,
     "match_and_move_torrents_scan_interval": 300,
     "check_and_delete_scan_interval": 300,
