@@ -8,6 +8,7 @@ Seedr is a companion for Radarr and Qbittorrent.
 ### Usage
 - Disable `Use Hardlinks instead of Copy` in Radarr. (Settings -> Media Management (Show Advanced))
 - Rename `config.json.example` to `config.json`, adapt the included `docker-compose.yml` and use `docker-compose up -d`
+  - Mount a directory containing the config file if you want some persistence (recommended). Seedr will store the state of missing movies in that directory.
 
 ### config.json
 | Config | Description | Options |

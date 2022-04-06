@@ -5,6 +5,6 @@ services:
     volumes:
       - /mnt/downloads:/mnt/downloads
       - /mnt/movies:/mnt/movies
-      - /etc/seedr/config.json:/root/.config/seedr/config.json
+      - /etc/seedr:/root/.config/seedr
     container_name: seedr
     restart: always
