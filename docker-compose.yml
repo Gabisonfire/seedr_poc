@@ -1,0 +1,10 @@
+version: '3.5'
+services:
+  seedr:
+    image: gabisonfire/seedr:latest
+    volumes:
+      - /mnt/downloads:/mnt/downloads
+      - /mnt/movies:/mnt/movies
+      - /etc/seedr/config.json:/root/.config/seedr/config.json
+    container_name: seedr
+    restart: always

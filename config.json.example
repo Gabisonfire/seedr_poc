@@ -1,0 +1,18 @@
+{
+    "loglevel": "info",
+    "torrent_client": "qbittorrent",
+    "torrent_host": "qbittorrent.example.com",
+    "torrent_username": "admin",
+    "torrent_password": "admin",
+    "torrent_category": "radarr",
+    "radarr_host": "http://radarr.example.com",
+    "radar_api_key": "1234456789asd123456789asd",
+    "torrent_dowload_directory": "/mnt/downloads",
+    "torrent_library_directory": "/mnt/movies",
+    "radarr_library_directory": "/data/movies",
+    "missing_status_scan_interval": 300,
+    "state_change_scan_interval": 30,
+    "match_and_move_torrents_scan_interval": 300,
+    "check_and_delete_scan_interval": 300,
+    "calculate_hashes": true
+}

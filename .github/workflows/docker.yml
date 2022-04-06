@@ -1,0 +1,36 @@
+name: Docker Image CI
+
+on:
+  release:
+    types: [created]
+
+env:
+  IMAGE_NAME: "gabisonfire/seedr"
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Docker buildx
+        uses: docker/setup-buildx-action@79abd3f86f79a9d68a23c75a09a9a85889262adf
+
+      - name: Log into Dockerhub
+        uses: docker/login-action@28218f9b04b4f3f62068d7b6ce6ca5b26e35336c
+        with:
+          registry: docker.io
+          username: ${{ secrets.DH_USERNAME }}
+          password: ${{ secrets.DH_TOKEN }}
+
+      - name: Build and push Docker image
+        id: build-and-push
+        uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
+        with:
+          context: .
+          push: true
+          tags: "gabisonfire/seedr:${GITHUB_REF##*/}"

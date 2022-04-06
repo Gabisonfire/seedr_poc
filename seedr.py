@@ -6,6 +6,8 @@ import os
 import hashlib
 import time
 import argparse
+import signal
+import json
 import settings
 
 from pathlib import Path
@@ -18,18 +20,22 @@ parser.add_argument("--add-id", help="Add a TMDBid to watch.", type=int)
 parser.add_argument("--skip-hash", help="Skip the file hash check.", action="store_true")
 parser.add_argument("--no-delete", help="Don't delete the original file.", action="store_true")
 parser.add_argument("--force-state-change", help="Skip the file hash check.", type=int)
-parser.add_argument("-c", "--config", help="Path to the config file.", type=int)
+parser.add_argument("-c", "--config", help="Path to the config file.", type=str)
 args = parser.parse_args()
 
 if args.config is not None:
     settings.config_file = args.config
 else:
-    dir_path = f"{str(Path.home())}/.config/seedarr/"
+    dir_path = f"{str(Path.home())}/.config/seedr/"
     dir_path = os.path.join(dir_path, 'config.json')
     settings.config_file = dir_path
 
+if not os.path.isfile(settings.config_file):
+    print(f"Config file does not exist: {settings.config_file}")
+    exit()
+
 logger = logging.getLogger("seedarr")
-logger.setLevel(logging.INFO)
+logger.setLevel(cfg.read_config("loglevel").upper())
 console = logging.StreamHandler(sys.stdout)
 console.setLevel(cfg.read_config("loglevel").upper())
 formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(filename)s - %(message)s', datefmt='%y-%m-%d,%H:%M:%S')
@@ -41,6 +47,8 @@ sched = BackgroundScheduler(timezone="America/New_York")
 def init():
     if args.add_id is not None:
         settings.watch.append(args.add_id)
+    if not args.skip_hash and cfg.read_config("calculate_hashes"):
+        settings.calculate_hashes = True
     
 
 def check_endpoints():
@@ -52,13 +60,15 @@ def check_endpoints():
         logger.info("Success!")
     except Exception as e:
         logger.error(f"Error connecting to the torrent client: {e}")
+        exit(1)
     try:
         logger.info(f"Checking connection to Radarr...")
         settings.radarr = RadarrAPI(cfg.read_config("radarr_host"), cfg.read_config("radar_api_key"))
-        logger.info(settings.radarr.get_health())
+        settings.radarr.get_health()
         logger.info("Success!")
     except Exception as e:
         logger.error(f"Error connecting to the torrent client: {e}")
+        exit(1)
 
 def get_missing():
     movies = settings.radarr.get_movie()    
@@ -103,7 +113,7 @@ def move_torrent(t, movie):
     if movie['tmdbId'] in settings.changed:
         settings.changed.remove(movie['tmdbId'])
     new_path = movie['movieFile']['path'].replace(cfg.read_config("radarr_library_directory"), cfg.read_config("torrent_library_directory"))
-    if not args.skip_hash:
+    if settings.calculate_hashes:
         logger.info("Comparing hashes to ensure files are identical")
         lib_file = blake(t['content_path'])
         download_file = blake(new_path)
@@ -176,8 +186,60 @@ def check_and_delete():
     for i in deleted:
         settings.to_delete.remove(i)
 
+def save():
+    savepath = os.path.dirname(settings.config_file)
+    try:
+        logger.info("Saving...")
+        watch = open(os.path.join(savepath, "watch.json"), "w")
+        changed = open(os.path.join(savepath, "changed.json"), "w")
+        to_delete = open(os.path.join(savepath, "to_delete.json"), "w")
+        watch.write(json.dumps(settings.watch))
+        changed.write(json.dumps(settings.changed))
+        to_delete.write(json.dumps(settings.to_delete))
+        watch.close()
+        changed.close()
+        to_delete.close()
+        logger.info("Saved.")
+    except Exception as e:
+        logger.error(f"Error saving data. {e}")
+
+def load():
+    savepath = os.path.dirname(settings.config_file)
+    try:
+        logger.info("Loading data...")
+        logger.debug(f"Path: {savepath}")
+        if os.path.isfile(os.path.join(savepath, "watch.json")):
+            watch = open(os.path.join(savepath, "watch.json"), "r")
+            settings.watch = json.loads(watch.read())
+            watch.close()
+            logger.debug(settings.watch)
+        if os.path.isfile(os.path.join(savepath, "changed.json")):
+            changed = open(os.path.join(savepath, "changed.json"), "r")
+            settings.changed = json.loads(changed.read())
+            changed.close()
+            logger.debug(settings.changed)
+        if os.path.isfile(os.path.join(savepath, "to_delete.json")):
+            to_delete = open(os.path.join(savepath, "to_delete.json"), "r")
+            settings.to_delete = json.loads(to_delete.read())
+            to_delete.close()
+            logger.debug(settings.to_delete)
+        logger.info("Data loaded.")
+    except Exception as e:
+        logger.error(f"Error loading data. {e}")
+
+def clean_shutdown(force=False):
+    save()
+    sched.shutdown(wait=not force)
+    logger.info("Goodbye.")
+    exit()
+
+def signal_handler(sig, frame):
+    clean_shutdown()
+
+signal.signal(signal.SIGINT, signal_handler)
 init()
 check_endpoints()
+load()
 logger.info("Starting scheduler...")
 sched.add_job(get_missing, 'interval', seconds=cfg.read_config("missing_status_scan_interval"), max_instances=10, id="missing_status_scan")
 sched.add_job(update_state, 'interval', seconds=cfg.read_config("state_change_scan_interval"), max_instances=10, id="state_change_scan")
@@ -187,6 +249,3 @@ sched.start()
 logger.info("Waiting.")
 while True:
     time.sleep(1)
-
-# # User provided acceptable states?
-# need save/load ids
