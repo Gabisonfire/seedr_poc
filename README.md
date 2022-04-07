@@ -23,7 +23,7 @@ It will monitor your Radarr downloads. Once downloaded and copied to your librar
 | torrent_category[^1] | The category assigned to torrents by Radarr. | ex: radarr |
 | radarr_host | The Radarr url | ex: http://radarr.example.com |
 | radar_api_key[^2] | Your Radarr api key | 1234456789asd123456789asd |
-| torrent_dowload_directory | The directory where your torrent client stores the downloads | ex: /mnt/downloads |
+| torrent_download_directory | The directory where your torrent client stores the downloads | ex: /mnt/downloads |
 | torrent_library_directory | The directory where you store your movies relative to your torrent client  | ex: /mnt/movies |
 | radarr_library_directory[^3] | Your Radarr library folder | ex: /etc/radarr/movies |
 | missing_status_scan_interval | The interval in secs when Seedr looks for "missing" movies | 30 |

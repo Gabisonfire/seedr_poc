@@ -8,6 +8,7 @@ import time
 import argparse
 import signal
 import json
+import shutil
 import settings
 
 from pathlib import Path
@@ -19,6 +20,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--add-id", help="Add a TMDBid to watch.", type=int)
 parser.add_argument("--skip-hash", help="Skip the file hash check.", action="store_true")
 parser.add_argument("--no-delete", help="Don't delete the original file.", action="store_true")
+parser.add_argument("--no-save", help="Don't save.", action="store_true")
 parser.add_argument("--force-state-change", help="Skip the file hash check.", type=int)
 parser.add_argument("-c", "--config", help="Path to the config file.", type=str)
 args = parser.parse_args()
@@ -82,9 +84,9 @@ def update_state():
     found = False
     unwatch = []
     if len(settings.watch) == 0:
-        logger.info("Watch queue empty.")
+        logger.debug("Watch queue empty.")
         return
-    logger.info("Looking for state changes...")
+    logger.debug("Looking for state changes...")
     for id in settings.watch:
         movie = settings.radarr.get_movie(id)
         if len(movie) == 1:
@@ -99,7 +101,7 @@ def update_state():
     for i in unwatch:
         settings.watch.remove(i)
     if not found:
-        logger.info("No state changes found.")
+        logger.debug("No state changes found.")
 
 def blake(file):
     with open(file, "rb") as f:
@@ -108,7 +110,7 @@ def blake(file):
             file_hash.update(chunk)
     return file_hash.hexdigest()
 
-def move_torrent(t, movie):
+def move_torrent(t, movie, rename):
     # Removing before hash check to prevent threads from analyzing the same file
     if movie['tmdbId'] in settings.changed:
         settings.changed.remove(movie['tmdbId'])
@@ -126,15 +128,46 @@ def move_torrent(t, movie):
             logger.info(f"{lib_file} and {download_file} hashes are identical.")
     else:
         logger.info("'--skip-hash' set, skipping hash check.")
-    logger.info(f"Moving torrent({t['hash']}) from {t['content_path']} to {new_path}")
+    if rename:
+        logger.debug("This torrent is in a folder and requires a rename before moving.")
+        rename_path = os.path.dirname(new_path)
+        logger.debug(f"Renaming {ntpath.basename(os.path.dirname(t['content_path']))} to {ntpath.basename(rename_path)}")
+        try:
+            settings.client.torrents_rename_folder(t['hash'], ntpath.basename(os.path.dirname(t['content_path'])), ntpath.basename(rename_path))
+            # Let the client rename the folder
+            time.sleep(5)
+            logger.info(f"Torrent moved, deleting old directory({os.path.dirname(t['content_path'])})")
+            # Failsafe
+            if os.path.dirname(t['content_path']) != cfg.read_config("torrent_library_directory") and os.path.dirname(t['content_path']) != cfg.read_config("radarr_library_directory") and os.path.dirname(t['content_path']) != cfg.read_config("torrent_download_directory"):
+                try:
+                    shutil.rmtree(os.path.dirname(t['content_path']))
+                except Exception as ex:
+                    logger.error(f"Error deleting old directory: {ex}")
+                    logger.debug(f"Error deleting old directory({os.path.dirname(t['content_path'])}): {ex}")
+            else:
+                logger.error(f"Hitting failsafe to prevent library deletion -> {os.path.dirname(t['content_path'])}")
+            t['content_path'] = os.path.join(cfg.read_config("torrent_download_directory"), ntpath.basename(rename_path))
+        except Exception as ee:
+            logger.error(f"Error renaming torrent: {ee}")
+            logger.debug(f"Error renaming torrent | {t['content_path']}, {rename_path}, {new_path}: {ee}")
     try:
         og_path = t['content_path']
-        t.set_location(location=os.path.dirname(new_path))
+        if rename:
+            logger.info(f"Moving torrent({t['hash']}) from {t['content_path']} to {os.path.dirname(new_path)}")
+            logger.debug("Renamed -> set_location")
+            t.set_location(location=cfg.read_config("torrent_library_directory"))
+        else:
+            logger.info(f"Moving torrent({t['hash']}) from {t['content_path']} to {new_path}")
+            t.set_location(location=os.path.dirname(new_path))
         logger.info(f"{movie['title']} moved. Removing from watch queue.")
         if movie['tmdbId'] in settings.changed:
             settings.changed.remove(movie['tmdbId'])
         logger.info(f"Queueing {t['name']} for deletion")
+        if rename:
+                # Renamed files only have a folder, adding a fake file to prevent dirname going up too much.
+                og_path = os.path.join(og_path, "fakefile.mkv")
         if {"torrent": t, "original_path": og_path} not in settings.to_delete:
+            logger.debug({"torrent": t, "original_path": og_path})
             settings.to_delete.append({"torrent": t, "original_path": og_path})
     except Exception as e:
         logger.error(f"Could not move torrent: {t['name']}. {e}")
@@ -146,20 +179,26 @@ def match_and_move_torrents():
     found = False
     torrents = settings.client.torrents_info(category=cfg.read_config("torrent_category"))
     if len(settings.changed) == 0:
-        logger.info("Change queue empty.")
+        logger.debug("Change queue empty.")
         return
     if len(torrents) > 0:
-        logger.info("Looking for torrent file match...")
+        logger.debug("Looking for torrent file match...")
     for id in settings.changed:
         movie = settings.radarr.get_movie(id)
         if len(movie) == 1:
             movie = movie[0]
-            logger.info(f"Looking for movie: {movie['title']} ({movie['movieFile']['relativePath']})")
+            logger.debug(f"Looking for movie: {movie['title']} ({movie['movieFile']['relativePath']})")
             for t in torrents:
-                if ntpath.basename(t['content_path']) == movie['movieFile']['relativePath']:
-                    found = True
-                    logger.info(f"Found a match with torrent: {t['name']}.")
-                    move_torrent(t, movie)
+                for f in settings.client.torrents_files(torrent_hash=t['hash']):
+                    if movie['movieFile']['relativePath'] == ntpath.basename(f['name']):
+                        found = True
+                        rename_needed = False
+                        logger.info(f"Found a match for {movie['title']} with torrent: {t['name']}.")
+                        t['content_path'] = os.path.join(t['content_path'],ntpath.basename(f['name']))
+                        if ntpath.basename(f['name']) != f['name']:
+                            rename_needed = True
+                        move_torrent(t, movie, rename_needed)
+                        break
     if not found and len(torrents) > 0:
         logger.warning(f"{len(settings.changed)} changes in Radarr but no match found in your torrent client.")
 
@@ -168,28 +207,34 @@ def check_and_delete():
     for torrent in settings.to_delete:
         status = settings.client.torrents_info(torrent_hashes=torrent["torrent"]['hash'])[0]
         if status['state'] not in ["error", "checkingUP", "moving", "unknown"]: 
-            logger.info(f"{status['name']}'s state is {status['state']}, deleting: {torrent['original_path']}")
+            logger.info(f"{status['name']}'s state is '{status['state']}', deleting: {os.path.dirname(torrent['original_path'])}")
             if not args.no_delete:
                 try:
-                    os.remove(torrent['original_path'])
+                    # Failsafe
+                    if os.path.dirname(torrent['original_path']) != cfg.read_config("torrent_library_directory") and os.path.dirname(torrent['original_path']) != cfg.read_config("radarr_library_directory") and os.path.dirname(torrent['original_path']) != cfg.read_config("torrent_download_directory"):
+                            shutil.rmtree(os.path.dirname(torrent['original_path']))
+                    else:
+                        logger.error(f"Hitting failsafe to prevent library deletion -> {os.path.dirname(torrent['original_path'])}")
                     if torrent not in deleted:
                         deleted.append(torrent)
-                    logger.info(f"{torrent['original_path']} deleted.")
+                    logger.info(f"{os.path.dirname(torrent['original_path'])} deleted.")
                 except Exception as e:
-                    logger.error(f"Error deleting {torrent['original_path']}, {e}")
+                    logger.error(f"Error deleting {os.path.dirname(torrent['original_path'])}, {e}")
             else:
                 logger.info("'--no-delete' set, skipping deletion.")
                 if torrent not in deleted:
                     deleted.append(torrent)
         else:
-            logger.info(f"{status['name']}'s state is {status['state']}, not ready for deletion.")
+            logger.debug(f"{status['name']}'s state is '{status['state']}', not ready for deletion.")
     for i in deleted:
         settings.to_delete.remove(i)
 
 def save():
+    if args.no_save:
+        return
     savepath = os.path.dirname(settings.config_file)
     try:
-        logger.info("Saving...")
+        logger.debug("Saving...")
         watch = open(os.path.join(savepath, "watch.json"), "w")
         changed = open(os.path.join(savepath, "changed.json"), "w")
         to_delete = open(os.path.join(savepath, "to_delete.json"), "w")
@@ -199,7 +244,7 @@ def save():
         watch.close()
         changed.close()
         to_delete.close()
-        logger.info("Saved.")
+        logger.debug("Saved.")
     except Exception as e:
         logger.error(f"Error saving data. {e}")
 
@@ -227,7 +272,7 @@ def load():
     except Exception as e:
         logger.error(f"Error loading data. {e}")
 
-def clean_shutdown(force=False):
+def clean_shutdown(force=True):
     save()
     sched.shutdown(wait=not force)
     logger.info("Goodbye.")
