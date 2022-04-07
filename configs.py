@@ -17,4 +17,6 @@ def read_config(cfg):
         if k == cfg:
             return cfg_file[k]
 
+# not found should throw an error
+
     

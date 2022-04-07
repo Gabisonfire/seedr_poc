@@ -7,7 +7,7 @@
     "torrent_category": "radarr",
     "radarr_host": "http://radarr.example.com",
     "radar_api_key": "1234456789asd123456789asd",
-    "torrent_dowload_directory": "/mnt/downloads",
+    "torrent_download_directory": "/mnt/downloads",
     "torrent_library_directory": "/mnt/movies",
     "radarr_library_directory": "/data/movies",
     "missing_status_scan_interval": 30,
