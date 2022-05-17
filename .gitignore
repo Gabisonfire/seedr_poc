@@ -1,1 +1,5 @@
 config.json
+docker-compose.dev.yml
+changed.json
+watch.json
+to_delete.json

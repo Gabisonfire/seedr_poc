@@ -212,7 +212,10 @@ def check_and_delete():
                 try:
                     # Failsafe
                     if os.path.dirname(torrent['original_path']) != cfg.read_config("torrent_library_directory") and os.path.dirname(torrent['original_path']) != cfg.read_config("radarr_library_directory") and os.path.dirname(torrent['original_path']) != cfg.read_config("torrent_download_directory"):
-                            shutil.rmtree(os.path.dirname(torrent['original_path']))
+                            if os.path.isdir(os.path.dirname(torrent['original_path'])):
+                                shutil.rmtree(os.path.dirname(torrent['original_path']))
+                            else:
+                                os.remove(os.path.dirname(torrent['original_path']))
                     else:
                         logger.error(f"Hitting failsafe to prevent library deletion -> {os.path.dirname(torrent['original_path'])}")
                     if torrent not in deleted:

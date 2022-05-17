@@ -1,4 +1,9 @@
 # Changelog
+
+### 0.3
+- Added delete retries
+- Improved delete logic
+
 ### 0.2
 - Fixed error not macthing torrents with multiple files
 - Changed default behaviour to kill threads on SIGINT
